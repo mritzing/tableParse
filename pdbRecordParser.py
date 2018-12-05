@@ -1,4 +1,5 @@
 import pdb
+from openpyxl import Workbook
 #http://www.wwpdb.org/documentation/file-format-content/format33/v3.3.html ref
 
 
@@ -480,6 +481,7 @@ COLUMNS         DATA TYPE     FIELD          DEFINITION
 66 - 70         Integer       numSeq         Number of SEQRES records
 """
 
+#copied from above to not break
 END = """
 COLUMNS         DATA TYPE     FIELD          DEFINITION
 ----------------------------------------------------------------------------------
@@ -500,27 +502,54 @@ COLUMNS         DATA TYPE     FIELD          DEFINITION
 66 - 70         Integer       numSeq         Number of SEQRES records
 """
 
-#COLUMNS        DATA  TYPE    FIELD        DEFINITION
+RealEnd = """
+COLUMNS       DATA  TYPE     FIELD         DEFINITION
+-------------------------------------------------------
+1 -  6        Record name    "END   "
+"""
+
 #none of the fixed width parsers worked so make my own
-def fixedWidth(text, splitVals):
-	#get header
+def fixedWidth(text):
+	#skip header
 	#skip ----
+	#get vals to split on as spacing is not consistent
+	allRows = []
+	lines = text.split('\n')[3:]
 	val0 = 0 # start of line
-	lines = text.split('\n')[2:]:
 	# val1  = pos of beginning of record name
 	val1 = lines[0].find("Record ")
-
 	# val 2 = begining of field 
+	val2 = lines[0].find("\"", val1)
 	# val 3 beginning of definition line 4
-	#get nums to split on , not consistent, 1-6 record name is consistent
-	#need to definition split value from line 3 
+	fEnd = lines[1].find("  ", val2) #end of field , find first following first non space character
+	val3 = lines[1].find(lines[1][fEnd:].split()[0])
+	for index, line in enumerate(lines): 
+		if len(line[val0:val1].split()) >0:
+			dataRow = []
+			startEnd = line[val0:val1].split()
+			#column start
+			dataRow.append(int(startEnd[0]) - 1)
+			#column end 
+			dataRow.append(int(startEnd[-1]) - 1)
+			#data type
+			dataRow.append(line[val1:val2].rstrip())
+			#field 
+			dataRow.append(line[val2:val3].rstrip())
+			#Check multi lines if column 1 is empty, only really care about description  
+			count = 1
+			descStr = line[val3:].rstrip()
+			while lines[index + count] != lines[-1]:
+				#if col1 exists
+				if len(lines[index + count][val0:val1].split()) > 0: 
+					break;
+				else:
+					descStr = descStr + lines[index + count][val3:].rstrip()
+				count = count + 1
+			dataRow.append(descStr)
+			allRows.append(dataRow)
+	return (allRows)
 
-	
-"""
-def writeExcel(llDict, fileName):
-	dictKey = "Null RN "
-	print("writing " , dictKey)
-"""
+
 #@headerString = "COLUMNS        DATA  TYPE    FIELD        DEFINITION"
 # Found headers
 # ['HEADER', 'TITLE', 'COMPND', 'SOURCE', 'KEYWDS', 'EXPDTA', 'AUTHOR', 'REVDAT', 'JRNL', 'REMARK', 'DBREF', 'SEQADV', 'SEQRES', 'HET', 'HETNAM', 'HETSYN', 'FORMUL', 'HELIX', 'SHEET', 'SITE', 'CRYST1', 'ORIGX1', 'ORIGX2', 'ORIGX3', 'SCALE1', 'SCALE2', 'SCALE3', 'ATOM', 'TER', 'HETATM', 'CONECT', 'MASTER', 'END']
@@ -528,12 +557,18 @@ def writeExcel(llDict, fileName):
 if __name__ == "__main__":
 
 	#DATA:  15  FIELD:  29  DEFINITION:  42
+	dictValues = {}
+	header = ["COLUMN START", "	COLUMN END" ,"DATA TYPE", "FIELD", "DEFINITION"]
+	tableNames = ['HEADER', 'TITLE', 'COMPND', 'SOURCE', 'KEYWDS', 'EXPDTA', 'AUTHOR', 'REVDAT', 'JRNL', 'REMARK', 'DBREF', 'SEQADV', 'SEQRES', 'HET', 'HETNAM', 'HETSYN', 'FORMUL', 'HELIX', 'SHEET', 'SITE', 'CRYST1', 'ORIGX1', 'ORIGX2', 'ORIGX3', 'SCALE1', 'SCALE2', 'SCALE3', 'ATOM', 'TER', 'HETATM', 'CONECT', 'MASTER', 'END']
 	tableList=[HEADER, TITLE, COMPND, SOURCE, KEYWDS, EXPDTA, AUTHOR, REVDAT, JRNL, REMARK, DBREF, SEQADV, SEQRES, HET, HETNAM, HETSYN, FORMUL, HELIX, SHEET, SITE, CRYST1, ORIGX1, ORIGX2, ORIGX3, SCALE1, SCALE2, SCALE3, ATOM, TER, HETATM, CONECT, MASTER, END]
-	firstWord = []
-	for line in open("2p4y.pdb", "r"):
-		if line.split()[0] not in firstWord:
-			firstWord.append(line.split()[0])
+	for index, item in enumerate(tableList):
+		dictValues[tableNames[index]] = fixedWidth(item)
 
-	print(firstWord)
-	#print("DATA: ", headerString.find("DATA"), " FIELD: ", headerString.find("FIELD"),  " DEFINITION: ", headerString.find("DEFINITION"))
-	
+	#write to excel
+	wb = Workbook()
+	for key in dictValues:
+		print(key)
+		curWS = wb.create_sheet(str(key))
+		for row in dictValues[key]:
+			curWS.append(row)
+	wb.save("testExcel.xlsx")
